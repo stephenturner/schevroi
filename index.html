@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virginia Degree ROI Explorer</title>
+<meta name="description" content="Compare SCHEV's return on investment estimates for bachelor's programs at Virginia colleges, by program, institution, and field.">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>Virginia Degree ROI Explorer</h1>
+    <p class="lede">SCHEV's estimates of lifetime earnings gains for bachelor's graduates of Virginia colleges, net of what the degree cost. Figures come from the <a href="https://collegeoutcomes.schev.edu/rdPage.aspx?rdReport=ROI.ROI_Dashboard" target="_blank" rel="noopener">SCHEV College Outcomes ROI dashboard</a>. <a class="jump" href="#method">How these estimates were made, and their limits</a></p>
+    <p class="byline">Made with ❤️ by <a href="https://stephenturner.us" target="_blank" rel="noopener">Stephen Turner</a>. View the <a href="https://github.com/stephenturner/schevroi" target="_blank" rel="noopener">source code</a>. <a href="data/schev_roi_all_institutions.csv" download>Download the full data (CSV)</a>.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="controls" aria-label="Filters">
+    <div class="control">
+      <span class="control-label" id="metric-label">Measure</span>
+      <div class="seg" role="radiogroup" aria-labelledby="metric-label">
+        <button type="button" role="radio" data-metric="net" aria-checked="true">Net lifetime difference</button>
+        <button type="button" role="radio" data-metric="ratio" aria-checked="false">ROI ratio</button>
+      </div>
+    </div>
+    <div class="control">
+      <label class="control-label" for="f-sector">Institutions</label>
+      <select id="f-sector">
+        <option value="public">Public only</option>
+        <option value="all">All</option>
+        <option value="private">Private only</option>
+      </select>
+    </div>
+    <div class="control control-range">
+      <label class="control-label" for="f-cov">Minimum share of graduates with wage data: <output id="f-cov-out">0%</output></label>
+      <input id="f-cov" type="range" min="0" max="60" step="5" value="0">
+    </div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button type="button" role="tab" id="tab-overview" aria-controls="panel-overview" data-tab="overview">Overview</button>
+    <button type="button" role="tab" id="tab-program" aria-controls="panel-program" data-tab="program">Compare a program</button>
+    <button type="button" role="tab" id="tab-institution" aria-controls="panel-institution" data-tab="institution">Institution profile</button>
+    <button type="button" role="tab" id="tab-table" aria-controls="panel-table" data-tab="table">All programs</button>
+  </nav>
+
+  <p id="status" class="status" role="status">Loading data…</p>
+
+  <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
+    <div class="tiles" id="ov-tiles"></div>
+    <div class="insights" id="ov-insights"></div>
+    <figure class="card">
+      <figcaption>
+        <h2>Spread within each field of study</h2>
+        <p>Each dot is one program at one institution. The dark tick marks the field's median. Hollow dots have wage data for fewer than 30% of graduates.</p>
+      </figcaption>
+      <div class="chart" id="ov-fields"></div>
+    </figure>
+    <figure class="card">
+      <figcaption>
+        <h2>How much of each estimate rests on wage data</h2>
+        <p>Share of graduates with matched Virginia wage records against the selected measure. Programs on the left side rest on few graduates, so treat their values as rough.</p>
+      </figcaption>
+      <div class="chart" id="ov-scatter"></div>
+    </figure>
+  </section>
+
+  <section id="panel-program" role="tabpanel" aria-labelledby="tab-program" hidden>
+    <div class="picker">
+      <label for="p-program">Program</label>
+      <select id="p-program"></select>
+    </div>
+    <div class="insights" id="p-summary"></div>
+    <figure class="card">
+      <figcaption>
+        <h2 id="p-title">Program across institutions</h2>
+        <p>Institutions are listed alphabetically, not by value. The dashed line is the median across the institutions shown. Hollow dots have wage data for fewer than 30% of graduates.</p>
+      </figcaption>
+      <div class="chart" id="p-chart"></div>
+    </figure>
+  </section>
+
+  <section id="panel-institution" role="tabpanel" aria-labelledby="tab-institution" hidden>
+    <div class="picker">
+      <label for="i-inst">Institution</label>
+      <select id="i-inst"></select>
+    </div>
+    <div class="tiles" id="i-tiles"></div>
+    <figure class="card">
+      <figcaption>
+        <h2 id="i-title">Programs at this institution</h2>
+        <p>Sorted by the selected measure. The gray tick shows the median for the same program at other Virginia institutions, where at least one other school reports it. Hollow dots have wage data for fewer than 30% of graduates.</p>
+      </figcaption>
+      <div class="chart" id="i-chart"></div>
+    </figure>
+  </section>
+
+  <section id="panel-table" role="tabpanel" aria-labelledby="tab-table" hidden>
+    <div class="table-tools">
+      <div class="control">
+        <label class="control-label" for="t-q">Search</label>
+        <input id="t-q" type="search" placeholder="Program, institution, or CIP code" autocomplete="off">
+      </div>
+      <div class="control">
+        <label class="control-label" for="t-field">Field</label>
+        <select id="t-field"></select>
+      </div>
+      <div class="control">
+        <label class="control-label" for="t-inst">Institution</label>
+        <select id="t-inst"></select>
+      </div>
+      <button type="button" id="t-download" class="btn">Download these rows (CSV)</button>
+    </div>
+    <p class="table-count" id="t-count"></p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col"><button type="button" data-sort="inst">Institution</button></th>
+            <th scope="col"><button type="button" data-sort="program">Program</button></th>
+            <th scope="col"><button type="button" data-sort="field">Field</button></th>
+            <th scope="col" class="num"><button type="button" data-sort="cov">With wage data</button></th>
+            <th scope="col" class="num"><button type="button" data-sort="net">Net lifetime difference</button></th>
+            <th scope="col" class="num"><button type="button" data-sort="ratio">ROI ratio</button></th>
+          </tr>
+        </thead>
+        <tbody id="t-body"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer" id="about">
+  <div class="wrap footer-grid">
+    <div class="footer-col">
+    <section>
+      <h2>About the data</h2>
+      <p>The figures are SCHEV's (State Council of Higher Education for Virginia), copied from its <a href="https://collegeoutcomes.schev.edu/rdPage.aspx?rdReport=ROI.ROI_Dashboard" target="_blank" rel="noopener">Return on Investment Report</a> in October 2026, one institution at a time. They cover bachelor's programs. SCHEV's estimates draw on the 2018-19 graduating cohort and on about 25 years of person-level Virginia wage records ending in 2019-20, adjusted to 2023 dollars.</p>
+      <p id="coverage-note">The dashboard's institution list had 49 entries. This copy has <span data-count="inst">39</span> institutions and <span data-count="rows">726</span> programs, so some institutions are missing, and we have not confirmed why. Use the original dashboard as the authoritative source.</p>
+    </section>
+    <section>
+      <h2>Read with care</h2>
+      <p>These are estimates for graduates who stayed and worked in Virginia, and for some programs fewer than a third of graduates have wage records. Differences between schools also reflect who enrolls and where graduates live, so the numbers are not program rankings.</p>
+    </section>
+    <section>
+      <h2>Who is not counted</h2>
+      <ul>
+        <li>Graduates who left Virginia or never worked in a job covered by Virginia unemployment insurance.</li>
+        <li>Federal employees, independent contractors, commission-only agents, railroad employees, elected officials, some religious and nonprofit employees, and certain agricultural and domestic workers.</li>
+        <li>Graduates who went on to earn a higher degree. That understates ROI for majors that feed graduate and professional school, such as biology, chemistry, and psychology.</li>
+      </ul>
+    </section>
+    </div>
+    <div class="footer-col">
+    <section id="method">
+      <h2>How SCHEV calculates it</h2>
+      <p>For each program area, SCHEV projects lifetime wages to age 67 from historical earnings, using seven-year moving medians and a linear fit. It compares those wages with a counterfactual: the same students entering the workforce after high school and earning high school wages to age 67. Cost includes student loan debt and net price.</p>
+      <dl class="defs">
+        <dt>Net lifetime difference</dt>
+        <dd>Bachelor's lifetime wages minus high school lifetime wages, student debt, and net price. A positive value is an estimated net gain from the degree.</dd>
+        <dt>ROI ratio</dt>
+        <dd>Bachelor's lifetime wages divided by the sum of high school lifetime wages, student debt, and net price. Above 1 means the estimated gain covers the cost; below 1 means it does not.</dd>
+        <dt>Share with wage data</dt>
+        <dd>The percentage of a program's graduates matched to Virginia wage records. The other two numbers rest on this group only.</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Reading the numbers</h2>
+      <ul>
+        <li>Location and personal characteristics can move earnings as much as the degree does. Programs whose graduates work in Northern Virginia look better partly because wages there are higher, and the cost of living is not subtracted.</li>
+        <li>The data has no occupation or industry, so it cannot show whether graduates work in their field.</li>
+        <li>Many bachelor's programs prepare students for graduate study rather than a specific job, unlike business, engineering, nursing, allied health, and teacher preparation.</li>
+        <li>Past earnings do not predict future ones. In March 2026 SCHEV began using ROI as one factor in reviewing public programs already flagged for possible discontinuation; ROI alone does not trigger a review.</li>
+        <li>William &amp; Mary economist David Feldman told VPM the method is sound but should not be used to rank programs across schools. This page lists institutions alphabetically for that reason.</li>
+      </ul>
+    </section>
+    </div>
+    <section class="footer-meta">
+      <p>Source: State Council of Higher Education for Virginia, <a href="https://collegeoutcomes.schev.edu/rdPage.aspx?rdReport=ROI.ROI_Dashboard" target="_blank" rel="noopener">College Outcomes ROI dashboard</a>. Background: <a href="https://www.vpm.org/news/2026-10-05/schev-roi-data-college-majors-earnings-massa-feldman-edwards/" target="_blank" rel="noopener">VPM News, October 5, 2026</a>. This is an independent page, not affiliated with SCHEV. <a href="data/schev_roi_all_institutions.csv" download>Download the full data (CSV)</a>.</p>
+    </section>
+  </div>
+</footer>
+
+<div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
